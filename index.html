@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#14110D" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Daily Self" />
+<title>오늘의 나 · Daily Self</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+<!-- ============================================================
+     테니스 동기부여 체크리스트 PWA (single file)
+     - 완전개방 공유: 아래 FAMILY_ID / firebaseConfig 만 채우면 됨
+     - 같은 URL을 여는 사람은 모두 같은 데이터를 봄 (로그인/코드 없음)
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+
+<style>
+  :root{
+    --bg:        #14110D;   /* warm near-black */
+    --bg-raise:  #1E1A14;   /* raised panels */
+    --bg-sink:   #0F0C09;   /* sunken (nav) */
+    --line:      #322B21;   /* hairline */
+    --cream:     #F3ECDD;   /* primary text */
+    --cream-dim: #A79E8C;   /* secondary text */
+    --cream-mut: #6B6455;   /* muted / disabled */
+    --lime:      #C8F02A;   /* accent */
+    --lime-deep: #9FBE1C;
+    --warn:      #E4A045;
+    --serif: 'Nanum Myeongjo', serif;
+    --sans: 'Pretendard', -apple-system, system-ui, sans-serif;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--cream); }
+  body{
+    font-family:var(--sans);
+    font-size:16px; line-height:1.5;
+    overscroll-behavior-y:none;
+    max-width:560px; margin:0 auto;
+    min-height:100vh;
+  }
+  button{ font-family:inherit; cursor:pointer; color:inherit; }
+  input,textarea{ font-family:inherit; }
+  ::selection{ background:var(--lime); color:#14110D; }
+
+  /* ---------- App shell ---------- */
+  #app{ padding-top:var(--safe-t); padding-bottom:calc(76px + var(--safe-b)); min-height:100vh; }
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 22px 14px;
+  }
+  .brand{ display:flex; flex-direction:column; line-height:1.05; }
+  .brand .k{
+    font-family:var(--serif); font-weight:800; font-size:23px; letter-spacing:-.01em;
+  }
+  .brand .k b{ color:var(--lime); font-weight:800; }
+  .brand .sub{
+    font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--cream-mut); margin-top:5px; font-weight:600;
+  }
+  .top-actions{ display:flex; gap:8px; align-items:center; }
+  .icon-btn{
+    width:40px; height:40px; border-radius:11px; border:1px solid var(--line);
+    background:var(--bg-raise); display:grid; place-items:center; padding:0;
+    transition:border-color .15s, background .15s;
+  }
+  .icon-btn:active{ background:#26211A; }
+  .icon-btn svg{ width:19px; height:19px; stroke:var(--cream); fill:none; stroke-width:1.8; }
+
+  .sync-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--cream-mut);
+    transition:background .3s; flex:none;
+  }
+  .sync-dot.on{ background:var(--lime); box-shadow:0 0 8px rgba(200,240,42,.6); }
+  .sync-dot.err{ background:var(--warn); }
+
+  /* date strip */
+  .datebar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin:2px 22px 16px; padding:11px 16px;
+    background:var(--bg-raise); border:1px solid var(--line); border-radius:13px;
+  }
+  .datebar .nav{ width:34px; height:34px; border-radius:9px; border:none; background:transparent;
+    display:grid; place-items:center; }
+  .datebar .nav svg{ width:18px; height:18px; stroke:var(--cream-dim); fill:none; stroke-width:2; }
+  .datebar .nav:disabled svg{ stroke:var(--bg-raise); }
+  .datebar .dlabel{ text-align:center; }
+  .datebar .dlabel .d1{ font-family:var(--serif); font-weight:700; font-size:17px; }
+  .datebar .dlabel .d2{ font-size:11px; color:var(--cream-dim); margin-top:2px; letter-spacing:.05em; }
+  .today-chip{ font-size:10px; color:var(--lime); border:1px solid var(--lime-deep);
+    padding:1px 7px; border-radius:20px; margin-left:7px; vertical-align:middle; font-weight:700; }
+
+  /* ---------- Tab pages ---------- */
+  .page{ display:none; padding:0 22px; animation:fade .25s ease; }
+  .page.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  /* score rings row */
+  .rings{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:8px; }
+  .ring-card{
+    background:var(--bg-raise); border:1px solid var(--line); border-radius:16px;
+    padding:15px 8px 13px; text-align:center;
+  }
+  .ring{ position:relative; width:76px; height:76px; margin:0 auto 8px; }
+  .ring svg{ transform:rotate(-90deg); }
+  .ring .val{
+    position:absolute; inset:0; display:grid; place-items:center;
+    font-family:var(--serif); font-weight:800; font-size:22px;
+  }
+  .ring-card .rl{ font-size:12.5px; font-weight:700; letter-spacing:.02em; }
+  .ring-card .rn{ font-size:10px; color:var(--cream-mut); margin-top:2px; }
+
+  .overall{
+    text-align:center; margin:6px 0 20px; padding:14px;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  }
+  .overall .lbl{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--cream-mut); font-weight:600; }
+  .overall .big{ font-family:var(--serif); font-weight:800; font-size:40px; line-height:1; margin-top:4px; }
+  .overall .big small{ font-size:17px; color:var(--cream-dim); font-weight:400; }
+  .overall .msg{ font-family:var(--serif); font-size:13.5px; color:var(--lime); margin-top:8px; font-style:italic; }
+
+  /* section of checklist */
+  .sec{ margin-bottom:22px; }
+  .sec-head{ display:flex; align-items:baseline; gap:9px; margin:0 2px 11px; }
+  .sec-head .idx{ font-family:var(--serif); font-weight:800; color:var(--lime); font-size:14px; }
+  .sec-head .nm{ font-family:var(--serif); font-weight:700; font-size:18px; }
+  .sec-head .cnt{ margin-left:auto; font-size:12px; color:var(--cream-dim); font-variant-numeric:tabular-nums; }
+
+  .item{
+    display:flex; align-items:center; gap:13px; width:100%; text-align:left;
+    background:var(--bg-raise); border:1px solid var(--line); border-radius:13px;
+    padding:14px 15px; margin-bottom:8px;
+    transition:border-color .15s, background .15s, transform .06s;
+  }
+  .item:active{ transform:scale(.992); }
+  .item .box{
+    width:24px; height:24px; border-radius:7px; border:2px solid var(--cream-mut);
+    flex:none; display:grid; place-items:center; transition:all .15s;
+  }
+  .item .box svg{ width:14px; height:14px; stroke:#14110D; fill:none; stroke-width:3; opacity:0; }
+  .item .lab{ font-size:14.5px; line-height:1.35; }
+  .item.on{ border-color:var(--lime-deep); background:#211F12; }
+  .item.on .box{ background:var(--lime); border-color:var(--lime); }
+  .item.on .box svg{ opacity:1; }
+  .item.on .lab{ color:var(--cream); }
+
+  /* journal */
+  .jhint{ font-size:12.5px; color:var(--cream-dim); margin:2px 2px 12px; line-height:1.55; }
+  textarea.journal{
+    width:100%; min-height:300px; resize:vertical;
+    background:var(--bg-raise); border:1px solid var(--line); border-radius:15px;
+    color:var(--cream); font-size:15px; line-height:1.75; padding:17px 16px;
+    outline:none; font-family:var(--serif);
+  }
+  textarea.journal:focus{ border-color:var(--lime-deep); }
+  textarea.journal::placeholder{ color:var(--cream-mut); font-style:italic; }
+  .jbar{ display:flex; align-items:center; justify-content:space-between; margin-top:11px; }
+  .jbar .saved{ font-size:12px; color:var(--cream-mut); }
+  .jbar .saved.ok{ color:var(--lime); }
+  .btn{
+    border:1px solid var(--lime-deep); background:var(--lime); color:#14110D;
+    font-weight:700; font-size:14px; padding:11px 20px; border-radius:11px;
+  }
+  .btn:active{ background:var(--lime-deep); }
+  .btn.ghost{ background:transparent; color:var(--cream); border-color:var(--line); }
+
+  /* calendar */
+  .cal-head{ display:flex; align-items:center; justify-content:space-between; margin:2px 0 14px; }
+  .cal-head .cm{ font-family:var(--serif); font-weight:700; font-size:18px; }
+  .cal-head button{ width:36px; height:36px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-raise); display:grid; place-items:center; }
+  .cal-head button svg{ width:16px; height:16px; stroke:var(--cream); fill:none; stroke-width:2; }
+  .dow{ display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:6px; }
+  .dow span{ text-align:center; font-size:10.5px; color:var(--cream-mut); font-weight:600; letter-spacing:.05em; }
+  .grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+  .cell{
+    aspect-ratio:1; border-radius:10px; border:1px solid transparent;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; background:transparent; padding:0; position:relative;
+  }
+  .cell.pad{ visibility:hidden; }
+  .cell .dn{ font-size:12.5px; color:var(--cream-dim); font-variant-numeric:tabular-nums; }
+  .cell.has{ background:var(--bg-raise); border-color:var(--line); }
+  .cell.has .dn{ color:var(--cream); font-weight:600; }
+  .cell .pip{ width:15px; height:15px; border-radius:50%; display:grid; place-items:center;
+    font-size:8px; font-weight:800; color:#14110D; }
+  .cell.sel{ border-color:var(--lime); }
+  .cell.today .dn::after{ content:''; display:block; width:4px; height:4px; border-radius:50%;
+    background:var(--lime); margin:2px auto 0; }
+  .cal-legend{ display:flex; gap:14px; justify-content:center; margin:16px 0 4px; flex-wrap:wrap; }
+  .cal-legend span{ font-size:11px; color:var(--cream-dim); display:flex; align-items:center; gap:5px; }
+  .cal-legend i{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  /* detail card under calendar */
+  .cal-detail{ margin-top:18px; background:var(--bg-raise); border:1px solid var(--line);
+    border-radius:15px; padding:16px; }
+  .cal-detail.empty{ text-align:center; color:var(--cream-mut); font-size:13px; padding:26px 16px; }
+  .cal-detail .cd-date{ font-family:var(--serif); font-weight:700; font-size:15px; margin-bottom:12px; }
+  .cd-scores{ display:flex; gap:8px; margin-bottom:14px; }
+  .cd-scores .s{ flex:1; text-align:center; background:var(--bg-sink); border-radius:10px; padding:9px 4px; }
+  .cd-scores .s .n{ font-family:var(--serif); font-weight:800; font-size:19px; }
+  .cd-scores .s .l{ font-size:10px; color:var(--cream-mut); margin-top:2px; }
+  .cd-journal{ font-family:var(--serif); font-size:13.5px; line-height:1.7; color:var(--cream-dim);
+    white-space:pre-wrap; border-top:1px solid var(--line); padding-top:12px; }
+
+  /* ---------- Bottom nav ---------- */
+  nav.bottom{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:560px;
+    background:var(--bg-sink); border-top:1px solid var(--line);
+    display:grid; grid-template-columns:repeat(3,1fr);
+    padding-bottom:var(--safe-b); z-index:40;
+  }
+  nav.bottom button{
+    background:none; border:none; padding:11px 0 9px;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    color:var(--cream-mut);
+  }
+  nav.bottom button svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  nav.bottom button .t{ font-size:10.5px; font-weight:600; letter-spacing:.02em; }
+  nav.bottom button.active{ color:var(--lime); }
+
+  /* ---------- Modal (settings) ---------- */
+  .scrim{ position:fixed; inset:0; background:rgba(8,6,4,.72); backdrop-filter:blur(3px);
+    z-index:50; display:none; }
+  .scrim.show{ display:block; }
+  .sheet{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:560px;
+    max-height:88vh; overflow-y:auto; background:var(--bg); border-radius:22px 22px 0 0;
+    border-top:1px solid var(--line); z-index:51;
+    padding:8px 22px calc(28px + var(--safe-b)); display:none;
+    animation:slideUp .28s cubic-bezier(.2,.9,.3,1);
+  }
+  .sheet.show{ display:block; }
+  @keyframes slideUp{ from{transform:translate(-50%,100%);} to{transform:translate(-50%,0);} }
+  .grab{ width:38px; height:4px; border-radius:3px; background:var(--line); margin:8px auto 16px; }
+  .sheet h2{ font-family:var(--serif); font-weight:800; font-size:21px; margin:0 0 4px; }
+  .sheet .sh-sub{ font-size:12.5px; color:var(--cream-dim); margin-bottom:20px; }
+
+  .field-lbl{ font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--cream-mut); font-weight:700; margin:22px 2px 10px; }
+
+  .lang-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .lang-row button{
+    padding:12px 0; border-radius:11px; border:1px solid var(--line); background:var(--bg-raise);
+    font-size:14px; font-weight:600; color:var(--cream-dim);
+  }
+  .lang-row button.on{ border-color:var(--lime); color:var(--lime); background:#1F1D12; }
+
+  /* edit checklist */
+  .edit-sec{ margin-bottom:8px; }
+  .edit-sec > .es-head{ display:flex; align-items:center; gap:8px; margin:14px 2px 8px; }
+  .edit-sec .es-head .en{ font-family:var(--serif); font-weight:700; font-size:16px; }
+  .edit-sec .es-head .ei{ color:var(--lime); font-family:var(--serif); font-weight:800; font-size:13px; }
+  .edit-item{ display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .edit-item input{
+    flex:1; background:var(--bg-raise); border:1px solid var(--line); border-radius:10px;
+    color:var(--cream); font-size:13.5px; padding:11px 12px; outline:none; min-width:0;
+  }
+  .edit-item input:focus{ border-color:var(--lime-deep); }
+  .edit-item .del{ width:34px; height:38px; flex:none; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg-raise); display:grid; place-items:center; }
+  .edit-item .del svg{ width:15px; height:15px; stroke:var(--warn); fill:none; stroke-width:2; }
+  .add-item{ width:100%; padding:11px; border-radius:10px; border:1px dashed var(--line);
+    background:transparent; color:var(--cream-dim); font-size:13px; font-weight:600; margin-top:2px; }
+  .add-item:active{ border-color:var(--lime-deep); color:var(--lime); }
+
+  .sheet-foot{ display:flex; gap:10px; margin-top:26px; }
+  .sheet-foot .btn{ flex:1; text-align:center; }
+
+  .lang-edit-tabs{ display:flex; gap:6px; margin:2px 2px 12px; }
+  .lang-edit-tabs button{ flex:1; padding:7px 0; border-radius:8px; border:1px solid var(--line);
+    background:var(--bg-raise); font-size:12px; color:var(--cream-dim); font-weight:600; }
+  .lang-edit-tabs button.on{ border-color:var(--lime); color:var(--lime); }
+
+  .about{ font-size:11.5px; color:var(--cream-mut); line-height:1.6; margin-top:8px; }
+
+  /* toast */
+  .toast{
+    position:fixed; left:50%; bottom:calc(90px + var(--safe-b)); transform:translateX(-50%) translateY(20px);
+    background:var(--cream); color:#14110D; font-size:13px; font-weight:600;
+    padding:10px 18px; border-radius:22px; z-index:60; opacity:0; pointer-events:none;
+    transition:opacity .25s, transform .25s; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .loading{ display:grid; place-items:center; height:60vh; color:var(--cream-mut); font-size:13px; gap:14px; }
+  .spin{ width:26px; height:26px; border:2.5px solid var(--line); border-top-color:var(--lime);
+    border-radius:50%; animation:sp 1s linear infinite; }
+  @keyframes sp{ to{ transform:rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading" id="boot">
+    <div class="spin"></div>
+    <div id="boot-msg">불러오는 중…</div>
+  </div>
+</div>
+
+<!-- bottom nav -->
+<nav class="bottom" id="nav" style="display:none">
+  <button data-tab="score" class="active">
+    <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <span class="t" data-i18n="tab_score">점수부여</span>
+  </button>
+  <button data-tab="journal">
+    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+    <span class="t" data-i18n="tab_journal">일지</span>
+  </button>
+  <button data-tab="calendar">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    <span class="t" data-i18n="tab_calendar">캘린더</span>
+  </button>
+</nav>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<!-- settings sheet -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <h2 data-i18n="settings">설정</h2>
+  <div class="sh-sub" data-i18n="settings_sub">언어와 체크리스트 항목을 관리합니다.</div>
+
+  <div class="field-lbl" data-i18n="language">언어</div>
+  <div class="lang-row" id="langRow">
+    <button data-lang="ko">한국어</button>
+    <button data-lang="en">English</button>
+    <button data-lang="ja">日本語</button>
+  </div>
+
+  <div class="field-lbl" data-i18n="edit_checklist">체크리스트 편집</div>
+  <div class="lang-edit-tabs" id="editLangTabs">
+    <button data-elang="ko">한국어</button>
+    <button data-elang="en">English</button>
+    <button data-elang="ja">日本語</button>
+  </div>
+  <div id="editArea"></div>
+
+  <div class="sheet-foot">
+    <button class="btn ghost" id="cancelEdit" data-i18n="cancel">취소</button>
+    <button class="btn" id="saveEdit" data-i18n="save">저장</button>
+  </div>
+
+  <div class="about" id="aboutBox"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ============================================================
+   1) 여기만 채우면 됩니다  (Firebase 콘솔 → 프로젝트 설정 → 웹앱)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAHgt-77guTyZiPRqXSzQVoqnizE_Rg9Xg",
+  authDomain: "noah-daily.firebaseapp.com",
+  projectId: "noah-daily",
+  storageBucket: "noah-daily.firebasestorage.app",
+  messagingSenderId: "495320041348",
+  appId: "1:495320041348:web:1b1f1365d8d79f6c1b3fd1"
+};
+
+/* 가족 고유 ID — 이 값이 곧 '열쇠'. 남에게 노출 안 되는 한 가족만 공유됩니다.
+   원하면 아무 문자열로 바꿔도 됩니다. (예: "jaea-family-2026") */
+const FAMILY_ID = "jaea-family";
+/* ============================================================ */
+
+/* ---------- i18n ---------- */
+const I = {
+  ko:{
+    appName:['오늘의 ','나'], appSub:'DAILY SELF · 테니스',
+    tab_score:'점수부여', tab_journal:'일지', tab_calendar:'캘린더',
+    settings:'설정', settings_sub:'언어와 체크리스트 항목을 관리합니다.',
+    language:'언어', edit_checklist:'체크리스트 편집',
+    cancel:'취소', save:'저장',
+    attitude:'태도', diligence:'성실', passion:'열정',
+    overall:'오늘의 종합 점수', done:'완료',
+    j_hint:'오늘 부족했던 점, 잘한 점, 내일은 어떤 연습을 할지 적어보자.',
+    j_ph:'오늘의 나를 돌아보며…',
+    j_save:'일지 저장', saved:'저장됨', notsaved:'저장 안 됨',
+    weekdays:['일','월','화','수','목','금','토'],
+    cal_empty:'날짜를 눌러 그날의 점수와 일지를 확인하세요.',
+    day_empty:'이 날은 기록이 없어요.',
+    high:'훌륭함', mid:'좋음', low:'조금 아쉬움', none:'오늘을 시작해볼까?',
+    add_item:'+ 항목 추가', toast_saved:'저장했어요',
+    toast_list:'체크리스트를 저장했어요', today:'오늘',
+    about:'같은 주소를 여는 사람은 누구나 아들의 점수와 일지를 함께 봅니다. 로그인이나 코드가 없으니 주소 관리에 유의하세요.',
+    msg_high:['최고의 하루였어!','오늘의 너, 정말 멋졌다.','이 마음가짐이면 뭐든 된다.'],
+    msg_mid:['잘하고 있어, 조금만 더!','오늘도 한 걸음 나아갔어.','꾸준함이 실력이 된다.'],
+    msg_low:['괜찮아, 내일 다시 하면 돼.','오늘 아쉬웠던 걸 내일 채우자.','작은 것 하나부터 다시.'],
+    msg_none:['체크리스트를 눌러 오늘을 시작해봐.']
+  },
+  en:{
+    appName:['Daily ','Self'], appSub:'DAILY SELF · TENNIS',
+    tab_score:'Score', tab_journal:'Journal', tab_calendar:'Calendar',
+    settings:'Settings', settings_sub:'Manage language and checklist items.',
+    language:'Language', edit_checklist:'Edit checklist',
+    cancel:'Cancel', save:'Save',
+    attitude:'Attitude', diligence:'Diligence', passion:'Passion',
+    overall:"Today's overall score", done:'done',
+    j_hint:'Write what you lacked today, what went well, and what to practice tomorrow.',
+    j_ph:'Reflecting on today…',
+    j_save:'Save journal', saved:'Saved', notsaved:'Not saved',
+    weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    cal_empty:'Tap a date to see its score and journal.',
+    day_empty:'No record for this day.',
+    high:'Excellent', mid:'Good', low:'Room to grow', none:'Ready to start?',
+    add_item:'+ Add item', toast_saved:'Saved',
+    toast_list:'Checklist saved', today:'Today',
+    about:'Anyone who opens this URL can see the scores and journal. There is no login or code, so keep the link private.',
+    msg_high:['What a great day!','You were brilliant today.','With this mindset, anything is possible.'],
+    msg_mid:["You're doing well — keep going!",'One more step forward today.','Consistency becomes skill.'],
+    msg_low:["It's okay, try again tomorrow.",'Fill the gaps tomorrow.','Start again from one small thing.'],
+    msg_none:['Tap the checklist to start your day.']
+  },
+  ja:{
+    appName:['今日の','僕'], appSub:'DAILY SELF · テニス',
+    tab_score:'採点', tab_journal:'日誌', tab_calendar:'カレンダー',
+    settings:'設定', settings_sub:'言語とチェックリスト項目を管理します。',
+    language:'言語', edit_checklist:'チェックリスト編集',
+    cancel:'キャンセル', save:'保存',
+    attitude:'態度', diligence:'誠実', passion:'情熱',
+    overall:'今日の総合スコア', done:'完了',
+    j_hint:'今日の反省点、良かった点、明日の練習を書こう。',
+    j_ph:'今日の自分を振り返って…',
+    j_save:'日誌を保存', saved:'保存済み', notsaved:'未保存',
+    weekdays:['日','月','火','水','木','金','土'],
+    cal_empty:'日付をタップして、その日のスコアと日誌を確認。',
+    day_empty:'この日は記録がありません。',
+    high:'すばらしい', mid:'good', low:'もう少し', none:'始めよう',
+    add_item:'+ 項目を追加', toast_saved:'保存しました',
+    toast_list:'チェックリストを保存しました', today:'今日',
+    about:'同じURLを開いた人は誰でもスコアと日誌を見られます。ログインやコードはないので、URLの管理にご注意ください。',
+    msg_high:['最高の一日だった！','今日の君、本当にすごかった。','この心構えなら何でもできる。'],
+    msg_mid:['よくやってる、あと少し！','今日も一歩前へ。','継続は力なり。'],
+    msg_low:['大丈夫、明日また頑張ろう。','今日の悔しさは明日に。','小さな一つから、もう一度。'],
+    msg_none:['チェックリストをタップして今日を始めよう。']
+  }
+};
+
+/* ---------- default checklist (trilingual) ---------- */
+const DEFAULTS = {
+  attitude:[
+    {id:'a1', ko:'큰 소리로 대답하기', en:'Answer in a loud, clear voice', ja:'大きな声で返事をする'},
+    {id:'a2', ko:'운동 중에 화이팅 외치기', en:'Cheer yourself on during practice', ja:'運動中にファイトと声を出す'},
+    {id:'a3', ko:'선생님들께 예의 바르게 행동하기', en:'Be respectful to coaches', ja:'先生方に礼儀正しくする'},
+    {id:'a4', ko:'거만하게 행동하지 않기', en:"Don't act arrogant", ja:'傲慢な態度をとらない'},
+    {id:'a5', ko:'실수해도 라켓 던지거나 짜증 내지 않기', en:"Don't throw the racket or get frustrated over mistakes", ja:'ミスしてもラケットを投げたり苛立たない'}
+  ],
+  diligence:[
+    {id:'d1', ko:'연습 중에 게으름 피우지 않기', en:"Don't slack off during practice", ja:'練習中に怠けない'},
+    {id:'d2', ko:'단체연습 외 추가 개인연습 하기(웨이트, 스트레칭 등등)', en:'Do extra solo training (weights, stretching, etc.)', ja:'団体練習以外に個人練習をする（ウェイト・ストレッチ等）'},
+    {id:'d3', ko:'일지를 쓰며 내일 부족한 점과 연습 계획 생각하기', en:"Journal and plan tomorrow's practice and weak points", ja:'日誌を書き、明日の課題と練習計画を考える'},
+    {id:'d4', ko:'훈련 전 미리 도착해 워밍업 충실히 하기', en:'Arrive early and warm up properly', ja:'練習前に早く着き、ウォームアップをしっかり'},
+    {id:'d5', ko:'컨디션 관리(수면·식사·스트레칭) 스스로 챙기기', en:'Manage your condition (sleep, meals, stretching)', ja:'コンディション管理（睡眠・食事・ストレッチ）を自分で'}
+  ],
+  passion:[
+    {id:'p1', ko:'시합과 연습에서 마지막 포인트까지 포기하지 않기', en:'Never give up until the last point in matches and practice', ja:'試合も練習も最後のポイントまで諦めない'},
+    {id:'p2', ko:'지고 있어도 끝까지 집중하고 최선 다하기', en:'Stay focused and give your best even when losing', ja:'負けていても最後まで集中し全力を尽くす'},
+    {id:'p3', ko:'어려운 공도 끝까지 쫓아가기', en:'Chase down every difficult ball', ja:'難しいボールも最後まで追いかける'},
+    {id:'p4', ko:'스스로 연습 목표를 정하고 도전하기', en:'Set your own goals and challenge yourself', ja:'自分で練習目標を決めて挑戦する'},
+    {id:'p5', ko:'경기·연습 후 잘한 점과 아쉬운 점 돌아보기', en:'Review your strengths and regrets after each session', ja:'試合・練習の後に良かった点と反省点を振り返る'}
+  ]
+};
+const SECTIONS = ['attitude','diligence','passion'];
+const SEC_IDX = {attitude:'Ⅰ', diligence:'Ⅱ', passion:'Ⅲ'};
+const SEC_COLOR = {attitude:'#C8F02A', diligence:'#7FD1E8', passion:'#F0862A'};
+
+/* ---------- state ---------- */
+let db, lang='ko', checklist=null;
+let curDate = ymd(new Date());
+let today = ymd(new Date());
+let dayData = { checks:{}, journal:'' };
+let calMonth = new Date(); calMonth.setDate(1);
+let monthCache = {}; // ymd -> {scores, hasJournal}
+let editLang='ko', editDraft=null;
+let saveTimer=null, journalDirty=false;
+
+/* ---------- helpers ---------- */
+function ymd(d){ const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; }
+function parseYmd(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function t(k){ return I[lang][k]; }
+function itemText(it){ return it[lang] || it.ko || it.en || it.ja || ''; }
+function $(s){ return document.querySelector(s); }
+function el(tag,cls){ const e=document.createElement(tag); if(cls)e.className=cls; return e; }
+
+function toast(msg){
+  const el=$('#toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1800);
+}
+function setSync(state){
+  const d=$('#syncDot'); if(!d)return;
+  d.className='sync-dot'+(state==='on'?' on':state==='err'?' err':'');
+}
+
+/* ---------- scoring ---------- */
+function sectionScore(sec){
+  const items=checklist[sec]; if(!items.length) return 0;
+  const done=items.filter(it=>dayData.checks[it.id]).length;
+  return Math.round(done/items.length*100);
+}
+function overallScore(){
+  const s=SECTIONS.map(sectionScore);
+  return Math.round(s.reduce((a,b)=>a+b,0)/3);
+}
+function scoresFromDoc(data, cl){
+  const out={};
+  SECTIONS.forEach(sec=>{
+    const items=cl[sec]||[]; if(!items.length){ out[sec]=0; return; }
+    const done=items.filter(it=>data.checks&&data.checks[it.id]).length;
+    out[sec]=Math.round(done/items.length*100);
+  });
+  out.overall=Math.round((out.attitude+out.diligence+out.passion)/3);
+  return out;
+}
+function moodMsg(sc){
+  let arr;
+  if(sc===0) arr=t('msg_none'); else if(sc>=80) arr=t('msg_high');
+  else if(sc>=50) arr=t('msg_mid'); else arr=t('msg_low');
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+
+/* ============================================================
+   Firestore paths
+   ============================================================ */
+const cfgRef = () => doc(db, 'families', FAMILY_ID, 'meta', 'config');
+const dayRef = (d) => doc(db, 'families', FAMILY_ID, 'days', d);
+
+async function loadChecklist(){
+  try{
+    const snap = await getDoc(cfgRef());
+    if(snap.exists() && snap.data().checklist){
+      checklist = snap.data().checklist;
+      // ensure all sections exist
+      SECTIONS.forEach(s=>{ if(!Array.isArray(checklist[s])) checklist[s]=DEFAULTS[s].map(x=>({...x})); });
+    }else{
+      checklist = JSON.parse(JSON.stringify(DEFAULTS));
+      await setDoc(cfgRef(), { checklist }, {merge:true});
+    }
+  }catch(e){
+    console.warn('checklist load failed, using defaults', e);
+    checklist = JSON.parse(JSON.stringify(DEFAULTS));
+  }
+}
+
+let dayUnsub=null;
+function subscribeDay(d){
+  if(dayUnsub) dayUnsub();
+  setSync('');
+  dayUnsub = onSnapshot(dayRef(d), snap=>{
+    if(snap.exists()){
+      const data=snap.data();
+      // don't clobber an unsaved journal the user is typing
+      dayData.checks = data.checks || {};
+      if(!journalDirty) dayData.journal = data.journal || '';
+    }else{
+      dayData.checks={}; if(!journalDirty) dayData.journal='';
+    }
+    setSync('on');
+    if(activeTab==='score') renderScore();
+    if(activeTab==='journal') renderJournalSaved();
+  }, err=>{ console.error(err); setSync('err'); });
+}
+
+async function saveChecks(){
+  try{
+    setSync('');
+    await setDoc(dayRef(curDate), { checks:dayData.checks, updatedAt:Date.now() }, {merge:true});
+    setSync('on');
+  }catch(e){ console.error(e); setSync('err'); toast('저장 실패 — 네트워크 확인'); }
+}
+async function saveJournal(){
+  try{
+    setSync('');
+    await setDoc(dayRef(curDate), { journal:dayData.journal, updatedAt:Date.now() }, {merge:true});
+    journalDirty=false; setSync('on'); renderJournalSaved(); toast(t('toast_saved'));
+  }catch(e){ console.error(e); setSync('err'); toast('저장 실패 — 네트워크 확인'); }
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+let activeTab='score';
+
+function renderChrome(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(n=>{
+    const k=n.getAttribute('data-i18n'); if(I[lang][k]) n.textContent=I[lang][k];
+  });
+  const nm=$('#brandName');
+  if(nm){ nm.innerHTML = `${t('appName')[0]}<b>${t('appName')[1]}</b>`; }
+  const sb=$('#brandSub'); if(sb) sb.textContent=t('appSub');
+  $('#aboutBox').textContent = t('about');
+}
+
+function ring(pct, color, size=76){
+  const r=(size-10)/2, c=2*Math.PI*r, off=c*(1-pct/100);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="#322B21" stroke-width="7" fill="none"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="${color}" stroke-width="7" fill="none"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+      style="transition:stroke-dashoffset .6s cubic-bezier(.3,.8,.3,1)"/>
+  </svg>`;
+}
+
+function renderDateBar(){
+  const d=parseYmd(curDate);
+  const isToday = curDate===today;
+  const wd=t('weekdays')[d.getDay()];
+  const d1 = lang==='en'
+    ? d.toLocaleDateString('en-US',{month:'long',day:'numeric'})
+    : `${d.getMonth()+1}${lang==='ja'?'月':'월'} ${d.getDate()}${lang==='ja'?'日':'일'}`;
+  const d2 = `${d.getFullYear()} · ${wd}${lang==='ko'?'요일':''}`;
+  const nextDisabled = curDate>=today;
+  return `
+    <div class="datebar">
+      <button class="nav" id="prevDay"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="dlabel">
+        <div class="d1">${d1}${isToday?`<span class="today-chip">${t('today')}</span>`:''}</div>
+        <div class="d2">${d2}</div>
+      </div>
+      <button class="nav" id="nextDay" ${nextDisabled?'disabled':''}><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>`;
+}
+
+function renderScore(){
+  const p=$('#page-score');
+  const s = { attitude:sectionScore('attitude'), diligence:sectionScore('diligence'), passion:sectionScore('passion') };
+  const ov = overallScore();
+
+  let html = renderDateBar();
+  html += `<div class="rings">`;
+  SECTIONS.forEach(sec=>{
+    html += `<div class="ring-card">
+      <div class="ring">${ring(s[sec],SEC_COLOR[sec])}<div class="val" style="color:${SEC_COLOR[sec]}">${s[sec]}</div></div>
+      <div class="rl">${t(sec)}</div>
+      <div class="rn">${checklist[sec].filter(it=>dayData.checks[it.id]).length}/${checklist[sec].length}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="overall">
+      <div class="lbl">${t('overall')}</div>
+      <div class="big">${ov}<small> / 100</small></div>
+      <div class="msg">${p&&p._msg && p._lastov===ov ? p._msg : (moodMsg(ov))}</div>
+    </div>`;
+
+  SECTIONS.forEach(sec=>{
+    const items=checklist[sec];
+    const done=items.filter(it=>dayData.checks[it.id]).length;
+    html += `<div class="sec">
+      <div class="sec-head"><span class="idx">${SEC_IDX[sec]}</span><span class="nm">${t(sec)}</span>
+        <span class="cnt">${done}/${items.length} ${t('done')}</span></div>`;
+    items.forEach(it=>{
+      const on=!!dayData.checks[it.id];
+      html += `<button class="item ${on?'on':''}" data-check="${it.id}">
+        <span class="box"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+        <span class="lab">${escapeHtml(itemText(it))}</span></button>`;
+    });
+    html += `</div>`;
+  });
+
+  p.innerHTML = html;
+  // keep the mood message stable per score value until it changes
+  p._lastov = ov; p._msg = p.querySelector('.overall .msg')?.textContent;
+
+  p.querySelectorAll('[data-check]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id=b.getAttribute('data-check');
+      dayData.checks[id]=!dayData.checks[id];
+      if(!dayData.checks[id]) delete dayData.checks[id];
+      p._lastov=null; // recompute message
+      renderScore(); saveChecks();
+    });
+  });
+  bindDateNav();
+}
+
+function renderJournal(){
+  const p=$('#page-journal');
+  p.innerHTML = renderDateBar() + `
+    <div class="jhint">${t('j_hint')}</div>
+    <textarea class="journal" id="journalText" placeholder="${t('j_ph')}">${escapeHtml(dayData.journal||'')}</textarea>
+    <div class="jbar">
+      <span class="saved" id="jsaved">${journalDirty?t('notsaved'):t('saved')}</span>
+      <button class="btn" id="saveJournalBtn">${t('j_save')}</button>
+    </div>`;
+  const ta=$('#journalText');
+  ta.addEventListener('input',()=>{ dayData.journal=ta.value; journalDirty=true; renderJournalSaved(); });
+  $('#saveJournalBtn').addEventListener('click', saveJournal);
+  bindDateNav();
+  renderJournalSaved();
+}
+function renderJournalSaved(){
+  const s=$('#jsaved'); if(!s) return;
+  s.textContent = journalDirty ? t('notsaved') : t('saved');
+  s.className = 'saved'+(journalDirty?'':' ok');
+  const ta=$('#journalText'); if(ta && !journalDirty && ta.value!==dayData.journal) ta.value=dayData.journal||'';
+}
+
+function bindDateNav(){
+  const prev=$('#prevDay'), next=$('#nextDay');
+  if(prev) prev.onclick=()=>shiftDay(-1);
+  if(next) next.onclick=()=>shiftDay(1);
+}
+function shiftDay(n){
+  const d=parseYmd(curDate); d.setDate(d.getDate()+n);
+  const nd=ymd(d); if(nd>today) return;
+  curDate=nd; journalDirty=false;
+  subscribeDay(curDate);
+  if(activeTab==='score') renderScore(); else renderJournal();
+}
+
+/* ---------- calendar ---------- */
+async function renderCalendar(){
+  const p=$('#page-calendar');
+  const y=calMonth.getFullYear(), m=calMonth.getMonth();
+  const first=new Date(y,m,1), start=first.getDay();
+  const days=new Date(y,m+1,0).getDate();
+  const mLabel = lang==='en'
+    ? calMonth.toLocaleDateString('en-US',{month:'long',year:'numeric'})
+    : `${y}${lang==='ja'?'年':'년'} ${m+1}${lang==='ja'?'月':'월'}`;
+
+  let html = `<div class="cal-head">
+    <button id="calPrev"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="cm">${mLabel}</div>
+    <button id="calNext"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+  </div>
+  <div class="dow">${t('weekdays').map(w=>`<span>${w}</span>`).join('')}</div>
+  <div class="grid" id="calGrid">`;
+
+  for(let i=0;i<start;i++) html+=`<div class="cell pad"></div>`;
+  for(let dnum=1; dnum<=days; dnum++){
+    const key=ymd(new Date(y,m,dnum));
+    const info=monthCache[key];
+    const isToday = key===today;
+    const isSel = key===curDate;
+    let pip='';
+    if(info){
+      const sc=info.scores.overall;
+      const col = sc>=80?'#C8F02A':sc>=50?'#7FD1E8':sc>0?'#F0862A':'#5A5648';
+      pip=`<span class="pip" style="background:${col}">${sc}</span>`;
+    }
+    html+=`<button class="cell ${info?'has':''} ${isToday?'today':''} ${isSel?'sel':''}" data-day="${key}">
+      <span class="dn">${dnum}</span>${pip}</button>`;
+  }
+  html+=`</div>
+  <div class="cal-legend">
+    <span><i style="background:#C8F02A"></i>80+</span>
+    <span><i style="background:#7FD1E8"></i>50–79</span>
+    <span><i style="background:#F0862A"></i>1–49</span>
+  </div>
+  <div id="calDetail"></div>`;
+
+  p.innerHTML=html;
+  $('#calPrev').onclick=()=>{ calMonth.setMonth(calMonth.getMonth()-1); loadMonth().then(renderCalendar); };
+  $('#calNext').onclick=()=>{ calMonth.setMonth(calMonth.getMonth()+1); loadMonth().then(renderCalendar); };
+  p.querySelectorAll('[data-day]').forEach(b=>{
+    b.onclick=()=>{ selectedCalDay=b.getAttribute('data-day'); renderCalDetail(); 
+      p.querySelectorAll('.cell').forEach(c=>c.classList.remove('sel'));
+      b.classList.add('sel'); };
+  });
+  renderCalDetail();
+}
+
+let selectedCalDay=null;
+function renderCalDetail(){
+  const box=$('#calDetail'); if(!box) return;
+  const key=selectedCalDay;
+  if(!key){ box.innerHTML=`<div class="cal-detail empty">${t('cal_empty')}</div>`; return; }
+  const info=monthCache[key];
+  const d=parseYmd(key);
+  const dlabel = lang==='en'
+    ? d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+    : `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} (${t('weekdays')[d.getDay()]})`;
+  if(!info){ box.innerHTML=`<div class="cal-detail empty">${dlabel}<br><br>${t('day_empty')}</div>`; return; }
+  const s=info.scores;
+  box.innerHTML=`<div class="cal-detail">
+    <div class="cd-date">${dlabel}</div>
+    <div class="cd-scores">
+      <div class="s"><div class="n" style="color:${SEC_COLOR.attitude}">${s.attitude}</div><div class="l">${t('attitude')}</div></div>
+      <div class="s"><div class="n" style="color:${SEC_COLOR.diligence}">${s.diligence}</div><div class="l">${t('diligence')}</div></div>
+      <div class="s"><div class="n" style="color:${SEC_COLOR.passion}">${s.passion}</div><div class="l">${t('passion')}</div></div>
+    </div>
+    ${info.journal?`<div class="cd-journal">${escapeHtml(info.journal)}</div>`:''}
+  </div>`;
+}
+
+async function loadMonth(){
+  monthCache={};
+  try{
+    const snap = await getDocs(collection(db,'families',FAMILY_ID,'days'));
+    snap.forEach(s=>{
+      const data=s.data();
+      monthCache[s.id]={ scores:scoresFromDoc(data,checklist), journal:data.journal||'' };
+    });
+  }catch(e){ console.warn('month load failed',e); }
+}
+
+/* ---------- settings sheet ---------- */
+function openSheet(){
+  editDraft = JSON.parse(JSON.stringify(checklist));
+  editLang='ko';
+  renderLangRow(); renderEditLangTabs(); renderEditArea();
+  $('#scrim').classList.add('show'); $('#sheet').classList.add('show');
+}
+function closeSheet(){ $('#scrim').classList.remove('show'); $('#sheet').classList.remove('show'); }
+
+function renderLangRow(){
+  document.querySelectorAll('#langRow button').forEach(b=>{
+    b.classList.toggle('on', b.getAttribute('data-lang')===lang);
+    b.onclick=()=>{ lang=b.getAttribute('data-lang'); localStorage.setItem('ds_lang',lang);
+      renderChrome(); renderLangRow(); rerenderActive(); };
+  });
+}
+function renderEditLangTabs(){
+  document.querySelectorAll('#editLangTabs button').forEach(b=>{
+    b.classList.toggle('on', b.getAttribute('data-elang')===editLang);
+    b.onclick=()=>{ editLang=b.getAttribute('data-elang'); renderEditLangTabs(); renderEditArea(); };
+  });
+}
+function renderEditArea(){
+  const area=$('#editArea'); area.innerHTML='';
+  SECTIONS.forEach(sec=>{
+    const wrap=el('div','edit-sec');
+    const head=el('div','es-head');
+    head.innerHTML=`<span class="ei">${SEC_IDX[sec]}</span><span class="en">${t(sec)}</span>`;
+    wrap.appendChild(head);
+    editDraft[sec].forEach((it,i)=>{
+      const row=el('div','edit-item');
+      const inp=el('input'); inp.type='text';
+      inp.value = it[editLang]||'';
+      inp.placeholder = editLang==='ko'?'항목 입력':editLang==='en'?'Enter item':'項目を入力';
+      inp.addEventListener('input',()=>{ it[editLang]=inp.value; });
+      const del=el('button','del');
+      del.innerHTML=`<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>`;
+      del.onclick=()=>{ editDraft[sec].splice(i,1); renderEditArea(); };
+      row.appendChild(inp); row.appendChild(del);
+      wrap.appendChild(row);
+    });
+    const add=el('button','add-item'); add.textContent=t('add_item');
+    add.onclick=()=>{
+      const id=sec[0]+Date.now().toString(36);
+      editDraft[sec].push({id, ko:'', en:'', ja:''});
+      renderEditArea();
+    };
+    wrap.appendChild(add);
+    area.appendChild(wrap);
+  });
+}
+async function saveEdit(){
+  // drop fully-empty items
+  SECTIONS.forEach(sec=>{
+    editDraft[sec]=editDraft[sec].filter(it=> (it.ko||it.en||it.ja||'').trim()!=='' );
+  });
+  checklist = editDraft;
+  try{
+    await setDoc(cfgRef(), { checklist }, {merge:true});
+    toast(t('toast_list'));
+  }catch(e){ console.error(e); toast('저장 실패'); }
+  closeSheet();
+  rerenderActive();
+}
+
+/* ---------- tab switching ---------- */
+function switchTab(tab){
+  activeTab=tab;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.getAttribute('data-tab')===tab));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  $('#page-'+tab).classList.add('active');
+  rerenderActive();
+}
+function rerenderActive(){
+  if(activeTab==='score') renderScore();
+  else if(activeTab==='journal') renderJournal();
+  else if(activeTab==='calendar'){ loadMonth().then(renderCalendar); }
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================================================
+   Boot
+   ============================================================ */
+async function boot(){
+  lang = localStorage.getItem('ds_lang') || (navigator.language.startsWith('ja')?'ja':navigator.language.startsWith('en')?'en':'ko');
+
+  // build shell
+  document.getElementById('app').innerHTML = `
+    <header class="top">
+      <div class="brand">
+        <div class="k" id="brandName"></div>
+        <div class="sub" id="brandSub"></div>
+      </div>
+      <div class="top-actions">
+        <span class="sync-dot" id="syncDot"></span>
+        <button class="icon-btn" id="settingsBtn" aria-label="settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="page active" id="page-score"></div>
+    <div class="page" id="page-journal"></div>
+    <div class="page" id="page-calendar"></div>
+  `;
+
+  renderChrome();
+
+  // firebase
+  try{
+    const fbApp = initializeApp(firebaseConfig);
+    db = getFirestore(fbApp);
+  }catch(e){
+    document.getElementById('app').innerHTML =
+      `<div class="loading">Firebase 설정을 확인하세요.<br><small style="color:#6B6455">firebaseConfig / FAMILY_ID</small></div>`;
+    return;
+  }
+
+  await loadChecklist();
+  subscribeDay(curDate);
+
+  $('#nav').style.display='grid';
+  document.querySelectorAll('#nav button').forEach(b=>{
+    b.addEventListener('click',()=>switchTab(b.getAttribute('data-tab')));
+  });
+  $('#settingsBtn').addEventListener('click', openSheet);
+  $('#scrim').addEventListener('click', closeSheet);
+  $('#cancelEdit').addEventListener('click', closeSheet);
+  $('#saveEdit').addEventListener('click', saveEdit);
+
+  renderScore();
+  renderChrome();
+
+  // midnight roll-over check
+  setInterval(()=>{ const now=ymd(new Date()); if(now!==today){ today=now; if(curDate<today){} } }, 60000);
+}
+
+/* ---------- register service worker ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW register failed',err));
+  });
+}
+
+boot();
+</script>
+</body>
+</html>

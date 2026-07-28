@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Daily Self — Firestore 보안 규칙
+// 완전개방(로그인 없음) 방식이므로, families 경로만 열어둡니다.
+// 그 외 모든 경로는 차단됩니다.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 가족 데이터: 체크리스트 설정 + 날짜별 점수/일지
+    // FAMILY_ID(URL)를 아는 사람은 읽기/쓰기 가능
+    match /families/{familyId}/{document=**} {
+      allow read, write: if true;
+    }
+
+    // 나머지는 전부 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ── 나중에 조금 더 조이고 싶다면 ──────────────────────────────
+// 예를 들어 "우리 가족 ID로 시작하는 경로만" 열려면 아래처럼:
+//
+//   match /families/{familyId}/{document=**} {
+//     allow read, write: if familyId == 'jaea-family';
+//   }
+//
+// 완전한 보안(아무나 못 봄)은 로그인/인증이 필요하므로,
+// 지금 방식에서는 'URL을 아는 사람만' 이 최선의 절충입니다.
