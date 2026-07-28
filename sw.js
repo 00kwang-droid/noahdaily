@@ -1,6 +1,6 @@
 /* Daily Self — service worker
    버전을 올리면(예: v1 → v2) 새 배포 시 캐시가 갱신됩니다. */
-const CACHE = 'daily-self-v1';
+const CACHE = 'daily-self-v2';
 const SHELL = [
   './',
   './index.html',

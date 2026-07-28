@@ -586,14 +586,16 @@ function subscribeDay(d){
 async function saveChecks(){
   try{
     setSync('');
-    await setDoc(dayRef(curDate), { checks:dayData.checks, updatedAt:Date.now() }, {merge:true});
+    // 체크(checks)는 맵이라 merge 저장 시 해제/삭제가 반영되지 않음.
+    // 하루치 문서를 통째로(체크+일지) 저장해 상태를 정확히 덮어씀.
+    await setDoc(dayRef(curDate), { checks:dayData.checks, journal:dayData.journal||'', updatedAt:Date.now() });
     setSync('on');
   }catch(e){ console.error(e); setSync('err'); toast('저장 실패 — 네트워크 확인'); }
 }
 async function saveJournal(){
   try{
     setSync('');
-    await setDoc(dayRef(curDate), { journal:dayData.journal, updatedAt:Date.now() }, {merge:true});
+    await setDoc(dayRef(curDate), { checks:dayData.checks||{}, journal:dayData.journal, updatedAt:Date.now() });
     journalDirty=false; setSync('on'); renderJournalSaved(); toast(t('toast_saved'));
   }catch(e){ console.error(e); setSync('err'); toast('저장 실패 — 네트워크 확인'); }
 }
