@@ -1,6 +1,6 @@
 /* Daily Self — service worker
-   버전을 올리면(예: v1 → v2) 새 배포 시 캐시가 갱신됩니다. */
-const CACHE = 'daily-self-v3';
+   버전을 올리면(예: v3 → v4) 새 배포 시 캐시가 갱신됩니다. */
+const CACHE = 'daily-self-v4';
 const SHELL = [
   './',
   './index.html',
@@ -10,7 +10,17 @@ const SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then(async c => {
+      // 파일 하나가 404 등으로 실패해도 전체 설치가 무너지지 않도록
+      // addAll(all-or-nothing) 대신 개별 add + 실패 허용으로 처리합니다.
+      await Promise.allSettled(
+        SHELL.map(url => c.add(url).catch(err => {
+          console.warn('[sw] precache 실패(무시하고 계속):', url, err);
+        }))
+      );
+    }).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
