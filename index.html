@@ -9,9 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="Daily Self" />
 <title>오늘의 나 · Daily Self</title>
 
-<link rel="manifest" href="manifest.json" />
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
-<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+<link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png" />
 
 <!-- ============================================================
      테니스 동기부여 체크리스트 PWA (single file)
@@ -960,8 +960,43 @@ async function boot(){
 /* ---------- register service worker ---------- */
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW register failed',err));
+    navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(err=>console.warn('SW register failed',err));
   });
+}
+
+/* ── 앱 설치 버튼 ─────────────────────────────────────────────
+   크롬이 '설치 가능'이라고 판단하면 beforeinstallprompt 가 발생합니다.
+   이 버튼이 보이면 = 설치 조건 통과. 안 보이면 = 조건 미달(또는 이미 설치됨). */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstallBtn();
+});
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const b = document.getElementById('installBtn');
+  if (b) b.remove();
+});
+function showInstallBtn(){
+  if (document.getElementById('installBtn')) return;
+  const b = document.createElement('button');
+  b.id = 'installBtn';
+  b.textContent = '앱 설치';
+  b.style.cssText =
+    'position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:9999;' +
+    'padding:10px 20px;border:none;border-radius:999px;cursor:pointer;' +
+    'background:#C8F02A;color:#14110D;font-weight:800;font-size:14px;' +
+    "font-family:'Pretendard',-apple-system,system-ui,sans-serif;" +
+    'box-shadow:0 6px 18px rgba(0,0,0,.45);';
+  b.onclick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    b.remove();
+  };
+  document.body.appendChild(b);
 }
 
 boot();

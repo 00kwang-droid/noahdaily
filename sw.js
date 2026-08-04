@@ -1,12 +1,17 @@
-/* Daily Self — service worker
-   버전을 올리면(예: v3 → v4) 새 배포 시 캐시가 갱신됩니다. */
-const CACHE = 'daily-self-v4';
+/* Daily Self — service worker (v5)
+   ─────────────────────────────────────────────────────────────
+   중요: 앱을 수정해 다시 올릴 때는 아래 CACHE 값을 v6, v7... 로 올리세요.
+   v5부터 manifest.json / 아이콘은 "네트워크 우선"이라
+   아이콘을 바꿔도 옛 캐시가 설치를 막는 일이 없습니다.
+   ───────────────────────────────────────────────────────────── */
+const CACHE = 'daily-self-v5';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icon-192.png',
+  './icon-512.png',
+  './icon-512-maskable.png'
 ];
 
 self.addEventListener('install', e => {
@@ -31,8 +36,31 @@ self.addEventListener('activate', e => {
   );
 });
 
+// 네트워크 우선 + 성공 시 캐시 갱신, 실패 시 캐시로 폴백
+async function networkFirst(request, fallbackUrl) {
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {});
+    }
+    return res;
+  } catch (err) {
+    const hit = await caches.match(request);
+    if (hit) return hit;
+    if (fallbackUrl) {
+      const fb = await caches.match(fallbackUrl);
+      if (fb) return fb;
+    }
+    return Response.error();
+  }
+}
+
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
 
   // Firebase / Google / 외부 API는 절대 캐시하지 않고 그대로 네트워크로 보냅니다.
   if (
@@ -46,21 +74,32 @@ self.addEventListener('fetch', e => {
   }
 
   // 앱 문서(네비게이션): 네트워크 우선, 실패 시 캐시된 index.html
-  if (e.request.mode === 'navigate') {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match('./index.html'))
-    );
+  if (req.mode === 'navigate') {
+    e.respondWith(networkFirst(req, './index.html'));
+    return;
+  }
+
+  // ★ 매니페스트와 아이콘: 반드시 네트워크 우선
+  //   (캐시 우선이면 아이콘을 바꿔도 브라우저가 옛 파일을 보고 '설치'가 사라집니다)
+  const isManifest =
+    req.destination === 'manifest' || url.pathname.endsWith('/manifest.json');
+  const isIcon = /icon.*\.(png|svg|webp)$/i.test(url.pathname);
+  if (isManifest || isIcon) {
+    e.respondWith(networkFirst(req));
     return;
   }
 
   // 그 외 정적 리소스: 캐시 우선, 없으면 네트워크
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      if (res.ok && url.origin === location.origin) {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
-      }
-      return res;
-    }).catch(() => hit))
+    caches.match(req).then(hit => {
+      if (hit) return hit;
+      return fetch(req).then(res => {
+        if (res && res.ok && url.origin === location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() => Response.error());
+    })
   );
 });
